@@ -358,7 +358,8 @@ select {
 }
 
 .timer-panel[data-phase-type="rest"],
-.timer-panel[data-phase-type="cycle-rest"] {
+.timer-panel[data-phase-type="cycle-rest"],
+.timer-panel[data-phase-type="preparation"] {
   border-color: var(--rest-border);
   background: var(--rest);
 }

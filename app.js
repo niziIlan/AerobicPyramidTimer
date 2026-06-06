@@ -2,11 +2,28 @@ const STORAGE_KEY = "aerobicTimerRoutines";
 
 const defaultRoutine = {
   id: createId(),
-  name: "פירמידה בסיסית",
+  name: "פרמידה יורדת",
   repeatCount: 5,
   restBetweenCyclesSeconds: 60,
   steps: [
     { label: "עבודה", durationSeconds: 40, type: "work" },
+    { label: "מנוחה", durationSeconds: 10, type: "rest" },
+    { label: "עבודה", durationSeconds: 30, type: "work" },
+    { label: "מנוחה", durationSeconds: 10, type: "rest" },
+    { label: "עבודה", durationSeconds: 20, type: "work" },
+    { label: "מנוחה", durationSeconds: 10, type: "rest" }
+  ]
+};
+
+const ascendingRoutine = {
+  id: createId(),
+  name: "פרמידה עולה",
+  repeatCount: 5,
+  restBetweenCyclesSeconds: 60,
+  steps: [
+    { label: "עבודה", durationSeconds: 10, type: "work" },
+    { label: "מנוחה", durationSeconds: 10, type: "rest" },
+    { label: "עבודה", durationSeconds: 20, type: "work" },
     { label: "מנוחה", durationSeconds: 10, type: "rest" },
     { label: "עבודה", durationSeconds: 30, type: "work" },
     { label: "מנוחה", durationSeconds: 10, type: "rest" },
@@ -50,6 +67,7 @@ let timerDeadline = 0;
 let timerInterval = null;
 let timerPaused = false;
 let timerComplete = false;
+let audioContext = null;
 
 document.querySelector("#create-routine-button").addEventListener("click", () => openEditor());
 document.querySelector("#add-step-button").addEventListener("click", () => addStepRow());
@@ -80,16 +98,70 @@ function loadRoutines() {
     try {
       const parsedRoutines = JSON.parse(savedRoutines);
       if (Array.isArray(parsedRoutines)) {
-        return parsedRoutines;
+        const migratedRoutines = migrateDefaultRoutine(parsedRoutines);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedRoutines));
+        return migratedRoutines;
       }
     } catch (error) {
       console.warn("Could not read saved routines.", error);
     }
   }
 
-  const initialRoutines = [defaultRoutine];
+  const initialRoutines = [defaultRoutine, ascendingRoutine];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initialRoutines));
   return initialRoutines;
+}
+
+function migrateDefaultRoutine(savedRoutines) {
+  const oldDurations = [40, 10, 30, 10, 40, 10];
+  const descendingDurations = [40, 10, 30, 10, 20, 10];
+
+  const migratedRoutines = savedRoutines.map((routine) => {
+    if (routine.name === "פירמידה עולה") {
+      return { ...routine, name: "פרמידה עולה" };
+    }
+
+    if (routine.name === "פירמידה יורדת") {
+      return { ...routine, name: "פרמידה יורדת" };
+    }
+
+    const hasDefaultSettings = routine.repeatCount === 5
+      && routine.restBetweenCyclesSeconds === 60
+      && Array.isArray(routine.steps);
+    const isOldDefault = routine.name === "פירמידה בסיסית"
+      && hasDefaultSettings
+      && routine.repeatCount === 5
+      && routine.steps.length === oldDurations.length
+      && routine.steps.every((step, index) => step.durationSeconds === oldDurations[index]);
+    const isCurrentDefault = routine.name === "פירמידה בסיסית"
+      && hasDefaultSettings
+      && routine.steps.length === descendingDurations.length
+      && routine.steps.every(
+        (step, index) => step.durationSeconds === descendingDurations[index]
+      );
+
+    if (!isOldDefault && !isCurrentDefault) {
+      return routine;
+    }
+
+    return {
+      ...routine,
+      name: "פרמידה יורדת",
+      steps: routine.steps.map((step, index) => (
+        isOldDefault && index === 4 ? { ...step, durationSeconds: 20 } : step
+      ))
+    };
+  });
+
+  const hasAscendingRoutine = migratedRoutines.some(
+    (routine) => routine.name === ascendingRoutine.name
+  );
+
+  if (!hasAscendingRoutine) {
+    migratedRoutines.push(ascendingRoutine);
+  }
+
+  return migratedRoutines;
 }
 
 function saveRoutines() {
@@ -250,6 +322,7 @@ function closeEditor() {
 }
 
 function startRoutine(routine) {
+  prepareAudio();
   activeRoutine = {
     ...routine,
     steps: routine.steps.map((step) => ({ ...step }))
@@ -265,13 +338,19 @@ function startRoutine(routine) {
   pauseTimerButton.hidden = false;
   skipStepButton.hidden = false;
   pauseTimerButton.textContent = "השהיה";
-  playBell("phase-start");
   loadTimerPhase();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function buildTimerSequence(routine) {
-  const sequence = [];
+  const sequence = [{
+    label: "מתכוננים",
+    durationSeconds: 5,
+    type: "rest",
+    phaseType: "preparation",
+    cycleIndex: 0,
+    stepIndex: -1
+  }];
 
   for (let cycleIndex = 0; cycleIndex < routine.repeatCount; cycleIndex += 1) {
     routine.steps.forEach((step, stepIndex) => {
@@ -311,9 +390,13 @@ function loadTimerPhase() {
   timerSecondsRemaining = phase.durationSeconds;
   timerDeadline = Date.now() + timerSecondsRemaining * 1000;
   timerPanel.dataset.phaseType = phase.phaseType;
-  timerStatus.textContent = phase.phaseType === "cycle-rest"
-    ? "המחזור הבא מתחיל מיד לאחר המנוחה"
-    : "הטיימר פועל";
+  if (phase.phaseType === "preparation") {
+    timerStatus.textContent = "האימון יתחיל מיד";
+  } else if (phase.phaseType === "cycle-rest") {
+    timerStatus.textContent = "המחזור הבא מתחיל מיד לאחר המנוחה";
+  } else {
+    timerStatus.textContent = "הטיימר פועל";
+  }
   pauseTimerButton.textContent = "השהיה";
   timerPaused = false;
   renderTimer();
@@ -342,12 +425,17 @@ function renderTimer() {
 
   timerPhaseLabel.textContent = phase.label;
   timerCountdown.textContent = formatTime(timerSecondsRemaining);
-  timerCycleProgress.textContent = phase.phaseType === "cycle-rest"
-    ? `הושלם מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`
-    : `מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`;
-  timerStepProgress.textContent = phase.phaseType === "cycle-rest"
-    ? "מנוחה בין מחזורים"
-    : `שלב ${phase.stepIndex + 1} מתוך ${activeRoutine.steps.length}`;
+  if (phase.phaseType === "preparation") {
+    timerCycleProgress.textContent = `מחזור 1 מתוך ${activeRoutine.repeatCount}`;
+    timerStepProgress.textContent = "הכנה";
+  } else {
+    timerCycleProgress.textContent = phase.phaseType === "cycle-rest"
+      ? `הושלם מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`
+      : `מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`;
+    timerStepProgress.textContent = phase.phaseType === "cycle-rest"
+      ? "מנוחה בין מחזורים"
+      : `שלב ${phase.stepIndex + 1} מתוך ${activeRoutine.steps.length}`;
+  }
 
   const elapsed = phase.durationSeconds - timerSecondsRemaining;
   const progress = phase.durationSeconds > 0
@@ -373,6 +461,7 @@ function toggleTimerPause() {
   }
 
   if (timerPaused) {
+    prepareAudio();
     timerPaused = false;
     timerDeadline = Date.now() + timerSecondsRemaining * 1000;
     timerInterval = window.setInterval(updateTimer, 200);
@@ -396,7 +485,7 @@ function advanceTimerPhase() {
 
   const hasNextPhase = timerPhaseIndex + 1 < timerSequence.length;
   if (hasNextPhase) {
-    playBell("phase-start");
+    playBell();
   }
 
   timerPhaseIndex += 1;
@@ -408,11 +497,11 @@ function restartTimer() {
     return;
   }
 
+  prepareAudio();
   timerPhaseIndex = 0;
   timerComplete = false;
   pauseTimerButton.hidden = false;
   skipStepButton.hidden = false;
-  playBell("phase-start");
   loadTimerPhase();
 }
 
@@ -420,7 +509,7 @@ function completeTimer() {
   stopTimerInterval();
   timerComplete = true;
   timerPaused = false;
-  playBell("phase-start");
+  playBell();
   timerPanel.dataset.phaseType = "complete";
   timerPhaseLabel.textContent = "האימון הושלם";
   timerCountdown.textContent = "00:00";
@@ -447,13 +536,29 @@ function stopTimerInterval() {
   timerInterval = null;
 }
 
-function playBell(kind) {
+function prepareAudio() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) {
+    return null;
+  }
+
+  if (!audioContext || audioContext.state === "closed") {
+    audioContext = new AudioContext();
+  }
+
+  if (audioContext.state !== "running") {
+    audioContext.resume().catch(() => {});
+  }
+
+  return audioContext;
+}
+
+function playBell() {
+  const context = prepareAudio();
+  if (!context) {
     return;
   }
 
-  const context = new AudioContext();
   const notes = [
     { frequency: 783.99, delay: 0 },
     { frequency: 1046.5, delay: 0.2 }
@@ -475,8 +580,6 @@ function playBell(kind) {
     oscillator.start(startTime);
     oscillator.stop(startTime + 0.72);
   });
-
-  window.setTimeout(() => context.close(), 1100);
 }
 
 function moveRoutine(routineId, direction) {
