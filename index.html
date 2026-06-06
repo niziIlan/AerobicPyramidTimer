@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aerobic Timer</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container">
+        <h1>Aerobic Timer</h1>
+        <p>טיימר אירובי</p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="routines-view" aria-labelledby="routines-title">
+        <div class="section-heading">
+          <h2 id="routines-title">תוכניות האימון שלי</h2>
+          <button id="create-routine-button" class="primary-button" type="button">
+            + יצירת תוכנית חדשה
+          </button>
+        </div>
+
+        <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+        <div id="routines-list" class="routines-list"></div>
+      </section>
+
+      <section id="editor-view" class="editor" aria-labelledby="editor-title" hidden>
+        <div class="editor-heading">
+          <h2 id="editor-title">יצירת תוכנית חדשה</h2>
+        </div>
+
+        <form id="routine-form">
+          <div class="form-grid">
+            <label class="field field-wide">
+              <span>שם התוכנית</span>
+              <input id="routine-name" name="routineName" type="text" required>
+            </label>
+
+            <label class="field">
+              <span>מספר חזרות</span>
+              <input id="repeat-count" name="repeatCount" type="number" min="1" step="1" required>
+            </label>
+
+            <label class="field">
+              <span>מנוחה בין מחזורים (שניות)</span>
+              <input
+                id="cycle-rest"
+                name="restBetweenCyclesSeconds"
+                type="number"
+                min="0"
+                step="1"
+                required
+              >
+            </label>
+          </div>
+
+          <div class="steps-heading">
+            <h3>שלבי האימון</h3>
+            <button id="add-step-button" class="secondary-button" type="button">+ הוספת שלב</button>
+          </div>
+
+          <div id="steps-list" class="steps-list"></div>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">שמירת תוכנית</button>
+            <button id="cancel-edit-button" class="secondary-button" type="button">ביטול</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="timer-view" class="timer-screen" aria-labelledby="timer-routine-name" hidden>
+        <div class="timer-topbar">
+          <button id="exit-timer-button" class="secondary-button" type="button">סיום אימון</button>
+          <div>
+            <p class="timer-eyebrow">אימון פעיל</p>
+            <h2 id="timer-routine-name"></h2>
+          </div>
+        </div>
+
+        <div id="timer-panel" class="timer-panel" data-phase-type="work">
+          <div class="timer-progress-row">
+            <span id="timer-cycle-progress">מחזור 1 מתוך 1</span>
+            <span id="timer-step-progress">שלב 1 מתוך 1</span>
+          </div>
+
+          <p id="timer-phase-label" class="timer-phase-label">עבודה</p>
+          <p id="timer-countdown" class="timer-countdown" aria-live="off">00:00</p>
+          <p id="timer-status" class="timer-status" aria-live="polite">האימון התחיל</p>
+
+          <div class="timer-progress-track" aria-hidden="true">
+            <div id="timer-progress-bar" class="timer-progress-bar"></div>
+          </div>
+
+          <div class="timer-next">
+            <span>השלב הבא</span>
+            <strong id="timer-next-step">סיום האימון</strong>
+          </div>
+        </div>
+
+        <div class="timer-actions">
+          <button id="pause-timer-button" class="primary-button timer-main-action" type="button">
+            השהיה
+          </button>
+          <button id="skip-step-button" class="secondary-button" type="button">דילוג לשלב הבא</button>
+          <button id="restart-timer-button" class="secondary-button" type="button">התחלה מחדש</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
