@@ -1,4 +1,5 @@
 const STORAGE_KEY = "aerobicTimerRoutines";
+const SOUND_MUTED_KEY = "aerobicTimerSoundMuted";
 
 const defaultRoutine = {
   id: createId(),
@@ -41,7 +42,7 @@ const form = document.querySelector("#routine-form");
 const editorTitle = document.querySelector("#editor-title");
 const routineNameInput = document.querySelector("#routine-name");
 const repeatCountInput = document.querySelector("#repeat-count");
-const cycleRestInput = document.querySelector("#cycle-rest");
+const cycleRestPicker = document.querySelector("#cycle-rest");
 const stepsList = document.querySelector("#steps-list");
 const timerRoutineName = document.querySelector("#timer-routine-name");
 const timerPanel = document.querySelector("#timer-panel");
@@ -50,11 +51,17 @@ const timerStepProgress = document.querySelector("#timer-step-progress");
 const timerPhaseLabel = document.querySelector("#timer-phase-label");
 const timerCountdown = document.querySelector("#timer-countdown");
 const timerStatus = document.querySelector("#timer-status");
-const timerProgressBar = document.querySelector("#timer-progress-bar");
+const timerProgressRing = document.querySelector("#timer-progress-ring");
 const timerNextStep = document.querySelector("#timer-next-step");
 const pauseTimerButton = document.querySelector("#pause-timer-button");
+const pauseTimerLabel = pauseTimerButton.querySelector(".timer-control-label");
 const skipStepButton = document.querySelector("#skip-step-button");
 const restartTimerButton = document.querySelector("#restart-timer-button");
+const muteButton = document.querySelector("#mute-button");
+const muteIcon = muteButton.querySelector(".mute-icon");
+const summarySteps = document.querySelector("#summary-steps");
+const summaryRepeats = document.querySelector("#summary-repeats");
+const summaryDuration = document.querySelector("#summary-duration");
 
 let routines = loadRoutines();
 let editingRoutineId = null;
@@ -68,6 +75,8 @@ let timerInterval = null;
 let timerPaused = false;
 let timerComplete = false;
 let audioContext = null;
+let lastCountdownBeep = null;
+let soundMuted = localStorage.getItem(SOUND_MUTED_KEY) === "true";
 
 document.querySelector("#create-routine-button").addEventListener("click", () => openEditor());
 document.querySelector("#add-step-button").addEventListener("click", () => addStepRow());
@@ -76,12 +85,18 @@ document.querySelector("#exit-timer-button").addEventListener("click", exitTimer
 pauseTimerButton.addEventListener("click", toggleTimerPause);
 skipStepButton.addEventListener("click", advanceTimerPhase);
 restartTimerButton.addEventListener("click", restartTimer);
+muteButton.addEventListener("click", toggleSound);
 form.addEventListener("submit", saveRoutineFromForm);
+form.addEventListener("input", updateEditorSummary);
+form.addEventListener("change", updateEditorSummary);
 routinesList.addEventListener("click", handleRoutineAction);
-stepsList.addEventListener("click", handleStepRemoval);
+stepsList.addEventListener("click", handleStepAction);
 stepsList.addEventListener("change", handleStepTypeChange);
 
+populateNumberSelect(repeatCountInput, 1, 100);
+populateDurationPicker(cycleRestPicker);
 renderRoutines();
+renderSoundButton();
 
 function createId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -187,6 +202,11 @@ function renderRoutines() {
     const title = document.createElement("h3");
     title.textContent = routine.name;
 
+    const menuMark = document.createElement("span");
+    menuMark.className = "routine-menu-mark";
+    menuMark.textContent = "⋮";
+    menuMark.setAttribute("aria-hidden", "true");
+
     const summary = document.createElement("p");
     summary.className = "step-summary";
     summary.textContent = routine.steps.map((step) => step.durationSeconds).join(" / ");
@@ -194,17 +214,17 @@ function renderRoutines() {
     const details = document.createElement("p");
     details.className = "routine-details";
     details.append(
-      createDetail("מספר חזרות:", routine.repeatCount),
-      createDetail("מנוחה בין מחזורים:", `${routine.restBetweenCyclesSeconds} שניות`)
+      createDetail("↻", "מספר חזרות:", routine.repeatCount),
+      createDetail("◷", "מנוחה בין מחזורים:", formatDurationLabel(routine.restBetweenCyclesSeconds))
     );
 
     const actions = document.createElement("div");
     actions.className = "card-actions";
     actions.append(
-      createActionButton("הפעל", "start", "start-button"),
-      createActionButton("ערוך", "edit"),
-      createActionButton("שכפל", "duplicate"),
-      createActionButton("מחק", "delete", "delete-button")
+      createActionButton("▶", "הפעל", "start", "start-button"),
+      createActionButton("✎", "ערוך", "edit"),
+      createActionButton("▣", "שכפל", "duplicate"),
+      createActionButton("♲", "מחק", "delete", "delete-button")
     );
 
     const orderActions = document.createElement("div");
@@ -212,12 +232,12 @@ function renderRoutines() {
     orderActions.setAttribute("aria-label", "שינוי סדר התוכנית");
 
     const routineIndex = routines.indexOf(routine);
-    const moveUpButton = createActionButton("↑", "move-up", "order-button");
+    const moveUpButton = createActionButton("↑", "", "move-up", "order-button");
     moveUpButton.setAttribute("aria-label", "העברה למעלה");
     moveUpButton.title = "העברה למעלה";
     moveUpButton.disabled = routineIndex === 0;
 
-    const moveDownButton = createActionButton("↓", "move-down", "order-button");
+    const moveDownButton = createActionButton("↓", "", "move-down", "order-button");
     moveDownButton.setAttribute("aria-label", "העברה למטה");
     moveDownButton.title = "העברה למטה";
     moveDownButton.disabled = routineIndex === routines.length - 1;
@@ -226,32 +246,60 @@ function renderRoutines() {
 
     const cardHeading = document.createElement("div");
     cardHeading.className = "routine-card-heading";
-    cardHeading.append(title, orderActions);
+    const titleGroup = document.createElement("div");
+    titleGroup.className = "routine-title-group";
+    titleGroup.append(menuMark, title);
+    cardHeading.append(titleGroup, orderActions);
 
     card.append(cardHeading, summary, details, actions);
     routinesList.append(card);
   });
 }
 
-function createDetail(label, value) {
+function createDetail(icon, label, value) {
   const item = document.createElement("span");
+  const iconElement = document.createElement("span");
+  iconElement.className = "detail-icon";
+  iconElement.textContent = icon;
   const strong = document.createElement("strong");
   strong.textContent = `${label} `;
-  item.append(strong, document.createTextNode(value));
+  item.append(iconElement, strong, document.createTextNode(value));
   return item;
 }
 
-function createActionButton(label, action, className = "") {
+function createActionButton(icon, label, action, className = "") {
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.action = action;
-  button.textContent = label;
+  const iconElement = document.createElement("span");
+  iconElement.className = "action-icon";
+  iconElement.setAttribute("aria-hidden", "true");
+  iconElement.textContent = icon;
+  const labelElement = document.createElement("span");
+  labelElement.textContent = label;
+  button.append(iconElement, labelElement);
 
   if (className) {
     button.className = className;
   }
 
   return button;
+}
+
+function formatDurationLabel(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours} שעות ${minutes} דקות ${seconds} שניות`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes} דקות ${seconds} שניות`;
+  }
+
+  return `${seconds} שניות`;
 }
 
 function handleRoutineAction(event) {
@@ -296,7 +344,10 @@ function openEditor(routine = null) {
   editorTitle.textContent = routine ? "עריכת תוכנית" : "יצירת תוכנית חדשה";
   routineNameInput.value = routine ? routine.name : "";
   repeatCountInput.value = routine ? routine.repeatCount : 1;
-  cycleRestInput.value = routine ? routine.restBetweenCyclesSeconds : 60;
+  setDurationPickerValue(
+    cycleRestPicker,
+    routine ? routine.restBetweenCyclesSeconds : 60
+  );
   stepsList.replaceChildren();
 
   const steps = routine
@@ -307,6 +358,8 @@ function openEditor(routine = null) {
       ];
 
   steps.forEach(addStepRow);
+  refreshStepRows();
+  updateEditorSummary();
   routinesView.hidden = true;
   editorView.hidden = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -337,7 +390,7 @@ function startRoutine(routine) {
   timerRoutineName.textContent = activeRoutine.name;
   pauseTimerButton.hidden = false;
   skipStepButton.hidden = false;
-  pauseTimerButton.textContent = "השהיה";
+  setPauseButtonState(false);
   loadTimerPhase();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -388,6 +441,7 @@ function loadTimerPhase() {
 
   const phase = timerSequence[timerPhaseIndex];
   timerSecondsRemaining = phase.durationSeconds;
+  lastCountdownBeep = null;
   timerDeadline = Date.now() + timerSecondsRemaining * 1000;
   timerPanel.dataset.phaseType = phase.phaseType;
   if (phase.phaseType === "preparation") {
@@ -397,9 +451,10 @@ function loadTimerPhase() {
   } else {
     timerStatus.textContent = "הטיימר פועל";
   }
-  pauseTimerButton.textContent = "השהיה";
+  setPauseButtonState(false);
   timerPaused = false;
   renderTimer();
+  playCountdownBeep(timerSecondsRemaining);
   timerInterval = window.setInterval(updateTimer, 200);
 }
 
@@ -410,6 +465,7 @@ function updateTimer() {
   if (nextSeconds !== timerSecondsRemaining) {
     timerSecondsRemaining = nextSeconds;
     renderTimer();
+    playCountdownBeep(timerSecondsRemaining);
   }
 
   if (remainingMilliseconds <= 0) {
@@ -441,7 +497,10 @@ function renderTimer() {
   const progress = phase.durationSeconds > 0
     ? Math.min(100, Math.max(0, (elapsed / phase.durationSeconds) * 100))
     : 100;
-  timerProgressBar.style.width = `${progress}%`;
+  const ringCircumference = 289.03;
+  timerProgressRing.style.strokeDashoffset = String(
+    ringCircumference * (1 - progress / 100)
+  );
 
   const nextPhase = timerSequence[timerPhaseIndex + 1];
   timerNextStep.textContent = nextPhase
@@ -465,7 +524,7 @@ function toggleTimerPause() {
     timerPaused = false;
     timerDeadline = Date.now() + timerSecondsRemaining * 1000;
     timerInterval = window.setInterval(updateTimer, 200);
-    pauseTimerButton.textContent = "השהיה";
+    setPauseButtonState(false);
     timerStatus.textContent = "הטיימר פועל";
     return;
   }
@@ -473,7 +532,7 @@ function toggleTimerPause() {
   timerPaused = true;
   timerSecondsRemaining = Math.ceil(Math.max(0, timerDeadline - Date.now()) / 1000);
   stopTimerInterval();
-  pauseTimerButton.textContent = "המשך";
+  setPauseButtonState(true);
   timerStatus.textContent = "האימון מושהה";
   renderTimer();
 }
@@ -516,7 +575,7 @@ function completeTimer() {
   timerCycleProgress.textContent = `${activeRoutine.repeatCount} מחזורים הושלמו`;
   timerStepProgress.textContent = "כל הכבוד!";
   timerStatus.textContent = "סיימת את כל שלבי האימון";
-  timerProgressBar.style.width = "100%";
+  timerProgressRing.style.strokeDashoffset = "0";
   timerNextStep.textContent = "האימון הסתיים";
   pauseTimerButton.hidden = true;
   skipStepButton.hidden = true;
@@ -534,6 +593,32 @@ function exitTimer() {
 function stopTimerInterval() {
   window.clearInterval(timerInterval);
   timerInterval = null;
+}
+
+function setPauseButtonState(isPaused) {
+  pauseTimerButton.classList.toggle("is-resume", isPaused);
+  pauseTimerLabel.textContent = isPaused ? "המשך" : "השהיה";
+}
+
+function toggleSound() {
+  soundMuted = !soundMuted;
+  localStorage.setItem(SOUND_MUTED_KEY, String(soundMuted));
+  renderSoundButton();
+
+  if (!soundMuted) {
+    prepareAudio();
+    lastCountdownBeep = null;
+    playCountdownBeep(1);
+    lastCountdownBeep = null;
+  }
+}
+
+function renderSoundButton() {
+  muteButton.setAttribute("aria-pressed", String(soundMuted));
+  muteIcon.textContent = soundMuted ? "🔇" : "🔊";
+  const label = soundMuted ? "הפעלת צלילים" : "השתקת צלילים";
+  muteButton.setAttribute("aria-label", label);
+  muteButton.title = label;
 }
 
 function prepareAudio() {
@@ -554,32 +639,89 @@ function prepareAudio() {
 }
 
 function playBell() {
+  if (soundMuted) {
+    return;
+  }
+
   const context = prepareAudio();
   if (!context) {
     return;
   }
 
-  const notes = [
-    { frequency: 783.99, delay: 0 },
-    { frequency: 1046.5, delay: 0.2 }
+  const compressor = context.createDynamicsCompressor();
+  const masterGain = context.createGain();
+  compressor.threshold.setValueAtTime(-10, context.currentTime);
+  compressor.knee.setValueAtTime(10, context.currentTime);
+  compressor.ratio.setValueAtTime(8, context.currentTime);
+  compressor.attack.setValueAtTime(0.003, context.currentTime);
+  compressor.release.setValueAtTime(0.28, context.currentTime);
+  masterGain.gain.setValueAtTime(1.05, context.currentTime);
+  masterGain.connect(compressor);
+  compressor.connect(context.destination);
+
+  const strikes = [
+    { delay: 0, strength: 1 },
+    { delay: 0.13, strength: 0.88 },
+    { delay: 0.28, strength: 0.72 }
   ];
 
-  notes.forEach(({ frequency, delay }) => {
+  strikes.forEach(({ delay, strength }) => {
     const startTime = context.currentTime + delay;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
+    [
+      { frequency: 690, volume: 0.38, duration: 1.8 },
+      { frequency: 1035, volume: 0.3, duration: 1.5 },
+      { frequency: 1480, volume: 0.21, duration: 1.15 },
+      { frequency: 2075, volume: 0.14, duration: 0.85 },
+      { frequency: 2860, volume: 0.08, duration: 0.58 }
+    ].forEach(({ frequency, volume, duration }, toneIndex) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
 
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(frequency, startTime);
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.exponentialRampToValueAtTime(0.32, startTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.7);
+      oscillator.type = toneIndex < 2 ? "triangle" : "sine";
+      oscillator.frequency.setValueAtTime(frequency, startTime);
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(volume * strength, startTime + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(startTime);
-    oscillator.stop(startTime + 0.72);
+      oscillator.connect(gain);
+      gain.connect(masterGain);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration + 0.03);
+    });
   });
+}
+
+function playCountdownBeep(secondsRemaining) {
+  if (
+    soundMuted
+    ||
+    secondsRemaining < 1
+    || secondsRemaining > 3
+    || lastCountdownBeep === secondsRemaining
+  ) {
+    return;
+  }
+
+  const context = prepareAudio();
+  if (!context) {
+    return;
+  }
+
+  lastCountdownBeep = secondsRemaining;
+  const startTime = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(880, startTime);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.62, startTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.16);
+
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + 0.18);
 }
 
 function moveRoutine(routineId, direction) {
@@ -604,37 +746,120 @@ function addStepRow(step = { label: "עבודה", durationSeconds: 30, type: "wo
   row.dataset.stepType = step.type;
 
   row.innerHTML = `
-    <label class="field">
-      <span>שם השלב</span>
-      <input class="step-label" type="text" required>
-    </label>
-    <label class="field">
-      <span>משך (שניות)</span>
-      <input class="step-duration" type="number" min="1" step="1" required>
-    </label>
+    <div class="step-main">
+      <span class="step-number">שלב</span>
+      <label class="field">
+        <span>שם השלב</span>
+        <input class="step-label" type="text" required>
+      </label>
+    </div>
+    <div class="field duration-field">
+      <span>משך השלב</span>
+      <div class="duration-picker step-duration">
+        <label class="duration-seconds-field">
+          <span>שניות</span>
+          <select class="duration-seconds" aria-label="שניות"></select>
+        </label>
+        <label class="duration-minutes-field">
+          <span>דקות</span>
+          <select class="duration-minutes" aria-label="דקות"></select>
+        </label>
+        <label class="duration-hours-field">
+          <span>שעות</span>
+          <select class="duration-hours" aria-label="שעות"></select>
+        </label>
+      </div>
+    </div>
     <label class="field">
       <span>סוג</span>
-      <select class="step-type">
+      <select class="step-type step-type-badge">
         <option value="work">עבודה</option>
         <option value="rest">מנוחה</option>
       </select>
     </label>
-    <button class="remove-step-button" type="button" aria-label="מחיקת שלב" title="מחיקת שלב">×</button>
+    <div class="step-actions">
+      <button class="step-action-button duplicate-step" data-step-action="duplicate" type="button" aria-label="שכפול שלב" title="שכפול שלב">▣</button>
+      <button class="step-action-button move-step-up" data-step-action="up" type="button" aria-label="העברת שלב למעלה" title="העברת שלב למעלה">↑</button>
+      <button class="step-action-button move-step-down" data-step-action="down" type="button" aria-label="העברת שלב למטה" title="העברת שלב למטה">↓</button>
+      <button class="step-action-button delete-step" data-step-action="delete" type="button" aria-label="מחיקת שלב" title="מחיקת שלב">×</button>
+    </div>
   `;
 
   row.querySelector(".step-label").value = step.label;
-  row.querySelector(".step-duration").value = step.durationSeconds;
+  const durationPicker = row.querySelector(".step-duration");
+  populateDurationPicker(durationPicker);
+  setDurationPickerValue(durationPicker, step.durationSeconds);
   row.querySelector(".step-type").value = step.type;
   stepsList.append(row);
+  refreshStepRows();
+  updateEditorSummary();
 }
 
-function handleStepRemoval(event) {
-  const button = event.target.closest(".remove-step-button");
+function populateNumberSelect(select, minimum, maximum) {
+  if (select.options.length > 0) {
+    return;
+  }
+
+  for (let value = minimum; value <= maximum; value += 1) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+}
+
+function populateDurationPicker(picker) {
+  populateNumberSelect(picker.querySelector(".duration-hours"), 0, 23);
+  populateNumberSelect(picker.querySelector(".duration-minutes"), 0, 59);
+  populateNumberSelect(picker.querySelector(".duration-seconds"), 0, 59);
+}
+
+function setDurationPickerValue(picker, totalSeconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.min(23, Math.floor(safeSeconds / 3600));
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  picker.querySelector(".duration-hours").value = hours;
+  picker.querySelector(".duration-minutes").value = minutes;
+  picker.querySelector(".duration-seconds").value = seconds;
+}
+
+function getDurationPickerValue(picker) {
+  const hours = Number(picker.querySelector(".duration-hours").value);
+  const minutes = Number(picker.querySelector(".duration-minutes").value);
+  const seconds = Number(picker.querySelector(".duration-seconds").value);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function handleStepAction(event) {
+  const button = event.target.closest("[data-step-action]");
   if (!button) {
     return;
   }
 
-  button.closest(".step-row").remove();
+  const row = button.closest(".step-row");
+  const action = button.dataset.stepAction;
+
+  if (action === "delete") {
+    row.remove();
+  }
+
+  if (action === "duplicate") {
+    const duplicate = row.cloneNode(true);
+    row.after(duplicate);
+  }
+
+  if (action === "up" && row.previousElementSibling) {
+    row.previousElementSibling.before(row);
+  }
+
+  if (action === "down" && row.nextElementSibling) {
+    row.nextElementSibling.after(row);
+  }
+
+  refreshStepRows();
+  updateEditorSummary();
 }
 
 function handleStepTypeChange(event) {
@@ -643,6 +868,44 @@ function handleStepTypeChange(event) {
   }
 
   event.target.closest(".step-row").dataset.stepType = event.target.value;
+  updateEditorSummary();
+}
+
+function refreshStepRows() {
+  const rows = [...stepsList.querySelectorAll(".step-row")];
+
+  rows.forEach((row, index) => {
+    row.querySelector(".step-number").textContent = `שלב ${index + 1}`;
+    row.querySelector(".move-step-up").disabled = index === 0;
+    row.querySelector(".move-step-down").disabled = index === rows.length - 1;
+  });
+}
+
+function updateEditorSummary() {
+  const rows = [...stepsList.querySelectorAll(".step-row")];
+  const repeats = Number(repeatCountInput.value) || 1;
+  const cycleDuration = rows.reduce(
+    (total, row) => total + getDurationPickerValue(row.querySelector(".step-duration")),
+    0
+  );
+  const cycleRest = getDurationPickerValue(cycleRestPicker);
+  const totalDuration = cycleDuration * repeats + cycleRest * Math.max(0, repeats - 1);
+
+  summarySteps.textContent = rows.length;
+  summaryRepeats.textContent = repeats;
+  summaryDuration.textContent = formatSummaryTime(totalDuration);
+}
+
+function formatSummaryTime(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function saveRoutineFromForm(event) {
@@ -654,14 +917,22 @@ function saveRoutineFromForm(event) {
     return;
   }
 
+  const hasEmptyDuration = stepRows.some(
+    (row) => getDurationPickerValue(row.querySelector(".step-duration")) === 0
+  );
+  if (hasEmptyDuration) {
+    window.alert("משך כל שלב חייב להיות לפחות שנייה אחת.");
+    return;
+  }
+
   const routineData = {
     id: editingRoutineId || createId(),
     name: routineNameInput.value.trim(),
     repeatCount: Number(repeatCountInput.value),
-    restBetweenCyclesSeconds: Number(cycleRestInput.value),
+    restBetweenCyclesSeconds: getDurationPickerValue(cycleRestPicker),
     steps: stepRows.map((row) => ({
       label: row.querySelector(".step-label").value.trim(),
-      durationSeconds: Number(row.querySelector(".step-duration").value),
+      durationSeconds: getDurationPickerValue(row.querySelector(".step-duration")),
       type: row.querySelector(".step-type").value
     }))
   };

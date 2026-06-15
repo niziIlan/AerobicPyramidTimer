@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aerobic Timer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800&family=Rubik+Dirt&display=swap"
+      rel="stylesheet"
+    >
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
@@ -17,7 +23,10 @@
     <main class="container">
       <section id="routines-view" aria-labelledby="routines-title">
         <div class="section-heading">
-          <h2 id="routines-title">תוכניות האימון שלי</h2>
+          <div>
+            <h2 id="routines-title">תוכניות האימון שלי</h2>
+            <span class="section-title-line" aria-hidden="true"></span>
+          </div>
           <button id="create-routine-button" class="primary-button" type="button">
             + יצירת תוכנית חדשה
           </button>
@@ -30,39 +39,64 @@
       <section id="editor-view" class="editor" aria-labelledby="editor-title" hidden>
         <div class="editor-heading">
           <h2 id="editor-title">יצירת תוכנית חדשה</h2>
+          <span class="editor-heading-line" aria-hidden="true"></span>
         </div>
 
         <form id="routine-form">
-          <div class="form-grid">
-            <label class="field field-wide">
-              <span>שם התוכנית</span>
-              <input id="routine-name" name="routineName" type="text" required>
-            </label>
+          <section class="editor-section program-details-section" aria-labelledby="program-details-title">
+            <h3 id="program-details-title" class="editor-section-title">
+              <span aria-hidden="true">▣</span>
+              פרטי התוכנית
+            </h3>
 
-            <label class="field">
-              <span>מספר חזרות</span>
-              <input id="repeat-count" name="repeatCount" type="number" min="1" step="1" required>
-            </label>
+            <div class="form-grid">
+              <label class="field field-wide">
+                <span>שם התוכנית</span>
+                <input id="routine-name" name="routineName" type="text" required>
+              </label>
 
-            <label class="field">
-              <span>מנוחה בין מחזורים (שניות)</span>
-              <input
-                id="cycle-rest"
-                name="restBetweenCyclesSeconds"
-                type="number"
-                min="0"
-                step="1"
-                required
-              >
-            </label>
-          </div>
+              <label class="field">
+                <span>מספר חזרות</span>
+                <select id="repeat-count" name="repeatCount" required></select>
+              </label>
 
-          <div class="steps-heading">
-            <h3>שלבי האימון</h3>
-            <button id="add-step-button" class="secondary-button" type="button">+ הוספת שלב</button>
-          </div>
+              <div class="field">
+                <span>מנוחה בין מחזורים</span>
+                <div id="cycle-rest" class="duration-picker">
+                  <label class="duration-seconds-field">
+                    <span>שניות</span>
+                    <select class="duration-seconds" aria-label="שניות מנוחה בין מחזורים"></select>
+                  </label>
+                  <label class="duration-minutes-field">
+                    <span>דקות</span>
+                    <select class="duration-minutes" aria-label="דקות מנוחה בין מחזורים"></select>
+                  </label>
+                  <label class="duration-hours-field">
+                    <span>שעות</span>
+                    <select class="duration-hours" aria-label="שעות מנוחה בין מחזורים"></select>
+                  </label>
+                </div>
+              </div>
+            </div>
 
-          <div id="steps-list" class="steps-list"></div>
+            <div class="routine-summary" aria-live="polite">
+              <span><strong id="summary-steps">0</strong> שלבים</span>
+              <span><strong id="summary-repeats">1</strong> חזרות</span>
+              <span>משך כולל משוער <strong id="summary-duration">00:00</strong></span>
+            </div>
+          </section>
+
+          <section class="editor-section workout-steps-section" aria-labelledby="workout-steps-title">
+            <div class="steps-heading">
+              <h3 id="workout-steps-title" class="editor-section-title">
+                <span aria-hidden="true">☷</span>
+                שלבי האימון
+              </h3>
+              <button id="add-step-button" class="add-step-button" type="button">+ הוספת שלב</button>
+            </div>
+
+            <div id="steps-list" class="steps-list"></div>
+          </section>
 
           <div class="form-actions">
             <button class="primary-button" type="submit">שמירת תוכנית</button>
@@ -72,26 +106,39 @@
       </section>
 
       <section id="timer-view" class="timer-screen" aria-labelledby="timer-routine-name" hidden>
-        <div class="timer-topbar">
-          <button id="exit-timer-button" class="secondary-button" type="button">סיום אימון</button>
-          <div>
-            <p class="timer-eyebrow">אימון פעיל</p>
-            <h2 id="timer-routine-name"></h2>
-          </div>
-        </div>
-
         <div id="timer-panel" class="timer-panel" data-phase-type="work">
-          <div class="timer-progress-row">
-            <span id="timer-cycle-progress">מחזור 1 מתוך 1</span>
-            <span id="timer-step-progress">שלב 1 מתוך 1</span>
+          <button
+            id="mute-button"
+            class="mute-button"
+            type="button"
+            aria-label="השתקת צלילים"
+            aria-pressed="false"
+            title="השתקת צלילים"
+          >
+            <span class="mute-icon" aria-hidden="true">🔊</span>
+          </button>
+
+          <div class="timer-ring" aria-label="הזמן שנותר בשלב">
+            <svg class="timer-ring-graphic" viewBox="0 0 100 100" aria-hidden="true">
+              <circle class="timer-ring-track" cx="50" cy="50" r="46"></circle>
+              <circle id="timer-progress-ring" class="timer-ring-progress" cx="50" cy="50" r="46"></circle>
+            </svg>
+            <p id="timer-countdown" class="timer-countdown" aria-live="off">00:00</p>
+          </div>
+
+          <div class="timer-identity">
+            <div>
+              <p class="timer-eyebrow">אימון פעיל</p>
+              <h2 id="timer-routine-name"></h2>
+            </div>
           </div>
 
           <p id="timer-phase-label" class="timer-phase-label">עבודה</p>
-          <p id="timer-countdown" class="timer-countdown" aria-live="off">00:00</p>
           <p id="timer-status" class="timer-status" aria-live="polite">האימון התחיל</p>
 
-          <div class="timer-progress-track" aria-hidden="true">
-            <div id="timer-progress-bar" class="timer-progress-bar"></div>
+          <div class="timer-progress-row">
+            <span id="timer-cycle-progress">מחזור 1 מתוך 1</span>
+            <span id="timer-step-progress">שלב 1 מתוך 1</span>
           </div>
 
           <div class="timer-next">
@@ -101,11 +148,22 @@
         </div>
 
         <div class="timer-actions">
-          <button id="pause-timer-button" class="primary-button timer-main-action" type="button">
-            השהיה
+          <button id="exit-timer-button" class="timer-control timer-stop" type="button">
+            <span class="timer-control-icon" aria-hidden="true">■</span>
+            <span>עצור</span>
           </button>
-          <button id="skip-step-button" class="secondary-button" type="button">דילוג לשלב הבא</button>
-          <button id="restart-timer-button" class="secondary-button" type="button">התחלה מחדש</button>
+          <button id="pause-timer-button" class="timer-control timer-pause timer-main-action" type="button">
+            <span class="timer-control-icon" aria-hidden="true">Ⅱ</span>
+            <span class="timer-control-label">השהיה</span>
+          </button>
+          <button id="restart-timer-button" class="timer-control timer-restart" type="button">
+            <span class="timer-control-icon" aria-hidden="true">↻</span>
+            <span>מחדש</span>
+          </button>
+          <button id="skip-step-button" class="timer-control timer-skip" type="button">
+            <span class="timer-control-icon" aria-hidden="true">≫</span>
+            <span>דלג לשלב הבא</span>
+          </button>
         </div>
       </section>
     </main>
