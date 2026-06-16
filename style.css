@@ -881,7 +881,7 @@ select {
   }
 
   main {
-    padding-block: 8px 22px;
+    padding-block: 8px 10px;
   }
 
   .section-heading,
@@ -923,7 +923,12 @@ select {
   }
 
   .timer-panel {
-    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    min-height: calc(100vh - 138px);
+    min-height: calc(100svh - 138px);
+    padding: 10px 10px 14px;
   }
 
   .timer-phase-label {
@@ -934,7 +939,7 @@ select {
   }
 
   .timer-ring {
-    width: min(84vw, 360px);
+    width: min(88vw, 386px);
   }
 
   .timer-identity {
@@ -954,7 +959,7 @@ select {
 
   .timer-progress-row {
     gap: 4px 12px;
-    margin-top: 8px;
+    margin-top: 10px;
     font-size: 0.86rem;
   }
 
@@ -984,7 +989,7 @@ select {
   }
 
   .timer-next {
-    margin-top: 8px;
+    margin-top: 10px;
     font-size: 0.92rem;
   }
 
