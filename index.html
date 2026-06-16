@@ -106,6 +106,25 @@
       </section>
 
       <section id="timer-view" class="timer-screen" aria-labelledby="timer-routine-name" hidden>
+        <div class="timer-actions">
+          <button id="exit-timer-button" class="timer-control timer-stop" type="button">
+            <span class="timer-control-icon" aria-hidden="true">■</span>
+            <span>עצור</span>
+          </button>
+          <button id="pause-timer-button" class="timer-control timer-pause timer-main-action" type="button">
+            <span class="timer-control-icon" aria-hidden="true">Ⅱ</span>
+            <span class="timer-control-label">השהיה</span>
+          </button>
+          <button id="restart-timer-button" class="timer-control timer-restart" type="button">
+            <span class="timer-control-icon" aria-hidden="true">↻</span>
+            <span>מחדש</span>
+          </button>
+          <button id="skip-step-button" class="timer-control timer-skip" type="button">
+            <span class="timer-control-icon" aria-hidden="true">≫</span>
+            <span>דלג לשלב הבא</span>
+          </button>
+        </div>
+
         <div id="timer-panel" class="timer-panel" data-phase-type="work">
           <button
             id="mute-button"
@@ -126,15 +145,12 @@
             <p id="timer-countdown" class="timer-countdown" aria-live="off">00:00</p>
           </div>
 
-          <div class="timer-identity">
-            <div>
-              <p class="timer-eyebrow">אימון פעיל</p>
-              <h2 id="timer-routine-name"></h2>
-            </div>
-          </div>
-
           <p id="timer-phase-label" class="timer-phase-label">עבודה</p>
           <p id="timer-status" class="timer-status" aria-live="polite">האימון התחיל</p>
+
+          <div class="timer-identity">
+            <h2 id="timer-routine-name"></h2>
+          </div>
 
           <div class="timer-progress-row">
             <span id="timer-cycle-progress">מחזור 1 מתוך 1</span>
@@ -145,25 +161,6 @@
             <span>השלב הבא</span>
             <strong id="timer-next-step">סיום האימון</strong>
           </div>
-        </div>
-
-        <div class="timer-actions">
-          <button id="exit-timer-button" class="timer-control timer-stop" type="button">
-            <span class="timer-control-icon" aria-hidden="true">■</span>
-            <span>עצור</span>
-          </button>
-          <button id="pause-timer-button" class="timer-control timer-pause timer-main-action" type="button">
-            <span class="timer-control-icon" aria-hidden="true">Ⅱ</span>
-            <span class="timer-control-label">השהיה</span>
-          </button>
-          <button id="restart-timer-button" class="timer-control timer-restart" type="button">
-            <span class="timer-control-icon" aria-hidden="true">↻</span>
-            <span>מחדש</span>
-          </button>
-          <button id="skip-step-button" class="timer-control timer-skip" type="button">
-            <span class="timer-control-icon" aria-hidden="true">≫</span>
-            <span>דלג לשלב הבא</span>
-          </button>
         </div>
       </section>
     </main>

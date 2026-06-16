@@ -54,11 +54,12 @@ const timerStatus = document.querySelector("#timer-status");
 const timerProgressRing = document.querySelector("#timer-progress-ring");
 const timerNextStep = document.querySelector("#timer-next-step");
 const pauseTimerButton = document.querySelector("#pause-timer-button");
+const pauseTimerIcon = pauseTimerButton.querySelector(".timer-control-icon");
 const pauseTimerLabel = pauseTimerButton.querySelector(".timer-control-label");
 const skipStepButton = document.querySelector("#skip-step-button");
 const restartTimerButton = document.querySelector("#restart-timer-button");
 const muteButton = document.querySelector("#mute-button");
-const muteIcon = muteButton.querySelector(".mute-icon");
+const muteIcon = muteButton ? muteButton.querySelector(".mute-icon") : null;
 const summarySteps = document.querySelector("#summary-steps");
 const summaryRepeats = document.querySelector("#summary-repeats");
 const summaryDuration = document.querySelector("#summary-duration");
@@ -74,9 +75,10 @@ let timerDeadline = 0;
 let timerInterval = null;
 let timerPaused = false;
 let timerComplete = false;
+let timerStarted = false;
 let audioContext = null;
 let lastCountdownBeep = null;
-let soundMuted = localStorage.getItem(SOUND_MUTED_KEY) === "true";
+let soundMuted = muteButton ? localStorage.getItem(SOUND_MUTED_KEY) === "true" : false;
 
 document.querySelector("#create-routine-button").addEventListener("click", () => openEditor());
 document.querySelector("#add-step-button").addEventListener("click", () => addStepRow());
@@ -85,7 +87,9 @@ document.querySelector("#exit-timer-button").addEventListener("click", exitTimer
 pauseTimerButton.addEventListener("click", toggleTimerPause);
 skipStepButton.addEventListener("click", advanceTimerPhase);
 restartTimerButton.addEventListener("click", restartTimer);
-muteButton.addEventListener("click", toggleSound);
+if (muteButton) {
+  muteButton.addEventListener("click", toggleSound);
+}
 form.addEventListener("submit", saveRoutineFromForm);
 form.addEventListener("input", updateEditorSummary);
 form.addEventListener("change", updateEditorSummary);
@@ -382,16 +386,16 @@ function startRoutine(routine) {
   };
   timerSequence = buildTimerSequence(activeRoutine);
   timerPhaseIndex = 0;
-  timerPaused = false;
+  timerStarted = false;
+  timerPaused = true;
   timerComplete = false;
   routinesView.hidden = true;
   editorView.hidden = true;
   timerView.hidden = false;
-  timerRoutineName.textContent = activeRoutine.name;
+  timerRoutineName.textContent = `אימון פעיל · ${activeRoutine.name}`;
   pauseTimerButton.hidden = false;
   skipStepButton.hidden = false;
-  setPauseButtonState(false);
-  loadTimerPhase();
+  loadTimerPhase({ autoStart: false });
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -431,7 +435,8 @@ function buildTimerSequence(routine) {
   return sequence;
 }
 
-function loadTimerPhase() {
+function loadTimerPhase(options = {}) {
+  const { autoStart = timerStarted } = options;
   stopTimerInterval();
 
   if (timerPhaseIndex >= timerSequence.length) {
@@ -451,11 +456,15 @@ function loadTimerPhase() {
   } else {
     timerStatus.textContent = "הטיימר פועל";
   }
-  setPauseButtonState(false);
-  timerPaused = false;
+  timerStarted = autoStart;
+  timerPaused = !autoStart;
   renderTimer();
-  playCountdownBeep(timerSecondsRemaining);
-  timerInterval = window.setInterval(updateTimer, 200);
+  setPauseButtonState(timerPaused);
+
+  if (autoStart) {
+    playCountdownBeep(timerSecondsRemaining);
+    timerInterval = window.setInterval(updateTimer, 200);
+  }
 }
 
 function updateTimer() {
@@ -521,6 +530,7 @@ function toggleTimerPause() {
 
   if (timerPaused) {
     prepareAudio();
+    timerStarted = true;
     timerPaused = false;
     timerDeadline = Date.now() + timerSecondsRemaining * 1000;
     timerInterval = window.setInterval(updateTimer, 200);
@@ -530,6 +540,7 @@ function toggleTimerPause() {
   }
 
   timerPaused = true;
+  timerStarted = true;
   timerSecondsRemaining = Math.ceil(Math.max(0, timerDeadline - Date.now()) / 1000);
   stopTimerInterval();
   setPauseButtonState(true);
@@ -543,12 +554,12 @@ function advanceTimerPhase() {
   }
 
   const hasNextPhase = timerPhaseIndex + 1 < timerSequence.length;
-  if (hasNextPhase) {
+  if (hasNextPhase && timerStarted) {
     playBell();
   }
 
   timerPhaseIndex += 1;
-  loadTimerPhase();
+  loadTimerPhase({ autoStart: timerStarted });
 }
 
 function restartTimer() {
@@ -559,16 +570,22 @@ function restartTimer() {
   prepareAudio();
   timerPhaseIndex = 0;
   timerComplete = false;
+  timerStarted = false;
+  timerPaused = true;
   pauseTimerButton.hidden = false;
   skipStepButton.hidden = false;
-  loadTimerPhase();
+  loadTimerPhase({ autoStart: false });
 }
 
 function completeTimer() {
   stopTimerInterval();
+  const wasStarted = timerStarted;
   timerComplete = true;
   timerPaused = false;
-  playBell();
+  timerStarted = false;
+  if (wasStarted) {
+    playBell();
+  }
   timerPanel.dataset.phaseType = "complete";
   timerPhaseLabel.textContent = "האימון הושלם";
   timerCountdown.textContent = "00:00";
@@ -586,6 +603,7 @@ function exitTimer() {
   activeRoutine = null;
   timerSequence = [];
   timerComplete = false;
+  timerStarted = false;
   timerView.hidden = true;
   routinesView.hidden = false;
 }
@@ -596,8 +614,14 @@ function stopTimerInterval() {
 }
 
 function setPauseButtonState(isPaused) {
+  const isReadyToStart = isPaused && !timerStarted;
   pauseTimerButton.classList.toggle("is-resume", isPaused);
-  pauseTimerLabel.textContent = isPaused ? "המשך" : "השהיה";
+  pauseTimerIcon.textContent = isPaused ? "▶" : "Ⅱ";
+  pauseTimerLabel.textContent = isReadyToStart
+    ? "הפעל"
+    : isPaused
+      ? "המשך"
+      : "השהיה";
 }
 
 function toggleSound() {
@@ -614,6 +638,10 @@ function toggleSound() {
 }
 
 function renderSoundButton() {
+  if (!muteButton || !muteIcon) {
+    return;
+  }
+
   muteButton.setAttribute("aria-pressed", String(soundMuted));
   muteIcon.textContent = soundMuted ? "🔇" : "🔊";
   const label = soundMuted ? "הפעלת צלילים" : "השתקת צלילים";
