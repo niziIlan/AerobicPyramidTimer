@@ -33,6 +33,34 @@ const ascendingRoutine = {
   ]
 };
 
+const pomodoroRoutine = {
+  id: createId(),
+  name: "Pomodoro",
+  repeatCount: 1,
+  restBetweenCyclesSeconds: 0,
+  steps: [
+    { label: "עבודה", durationSeconds: 1500, type: "work" },
+    { label: "הפסקה", durationSeconds: 300, type: "rest" },
+    { label: "עבודה", durationSeconds: 1500, type: "work" },
+    { label: "הפסקה", durationSeconds: 300, type: "rest" },
+    { label: "עבודה", durationSeconds: 1500, type: "work" },
+    { label: "הפסקה", durationSeconds: 300, type: "rest" },
+    { label: "עבודה", durationSeconds: 1500, type: "work" },
+    { label: "הפסקה ארוכה", durationSeconds: 900, type: "rest" }
+  ]
+};
+
+const testRoutine = {
+  id: createId(),
+  name: "Test",
+  repeatCount: 3,
+  restBetweenCyclesSeconds: 0,
+  steps: [
+    { label: "עבודה", durationSeconds: 5, type: "work" },
+    { label: "מנוחה", durationSeconds: 3, type: "rest" }
+  ]
+};
+
 const routinesView = document.querySelector("#routines-view");
 const editorView = document.querySelector("#editor-view");
 const timerView = document.querySelector("#timer-view");
@@ -101,6 +129,7 @@ populateNumberSelect(repeatCountInput, 1, 100);
 populateDurationPicker(cycleRestPicker);
 renderRoutines();
 renderSoundButton();
+openInitialTimerView();
 
 function createId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -126,7 +155,7 @@ function loadRoutines() {
     }
   }
 
-  const initialRoutines = [defaultRoutine, ascendingRoutine];
+  const initialRoutines = [defaultRoutine, ascendingRoutine, pomodoroRoutine, testRoutine];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initialRoutines));
   return initialRoutines;
 }
@@ -180,11 +209,35 @@ function migrateDefaultRoutine(savedRoutines) {
     migratedRoutines.push(ascendingRoutine);
   }
 
+  const hasPomodoroRoutine = migratedRoutines.some(
+    (routine) => routine.name === pomodoroRoutine.name
+  );
+
+  if (!hasPomodoroRoutine) {
+    migratedRoutines.push(pomodoroRoutine);
+  }
+
+  const hasTestRoutine = migratedRoutines.some(
+    (routine) => routine.name === testRoutine.name
+  );
+
+  if (!hasTestRoutine) {
+    migratedRoutines.push(testRoutine);
+  }
+
   return migratedRoutines;
 }
 
 function saveRoutines() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(routines));
+}
+
+function openInitialTimerView() {
+  if (routines.length === 0) {
+    return;
+  }
+
+  startRoutine(routines[0]);
 }
 
 function renderRoutines() {
@@ -213,7 +266,9 @@ function renderRoutines() {
 
     const summary = document.createElement("p");
     summary.className = "step-summary";
-    summary.textContent = routine.steps.map((step) => step.durationSeconds).join(" / ");
+    summary.textContent = routine.steps
+      .map((step) => formatStepSummaryDuration(step.durationSeconds))
+      .join(" / ");
 
     const details = document.createElement("p");
     details.className = "routine-details";
@@ -379,7 +434,6 @@ function closeEditor() {
 }
 
 function startRoutine(routine) {
-  prepareAudio();
   activeRoutine = {
     ...routine,
     steps: routine.steps.map((step) => ({ ...step }))
@@ -513,8 +567,16 @@ function renderTimer() {
 
   const nextPhase = timerSequence[timerPhaseIndex + 1];
   timerNextStep.textContent = nextPhase
-    ? `${nextPhase.label}, ${nextPhase.durationSeconds} שניות`
+    ? `${nextPhase.label}, ${formatDurationLabel(nextPhase.durationSeconds)}`
     : "סיום האימון";
+}
+
+function formatStepSummaryDuration(totalSeconds) {
+  if (totalSeconds >= 60 && totalSeconds % 60 === 0) {
+    return String(totalSeconds / 60);
+  }
+
+  return String(totalSeconds);
 }
 
 function formatTime(totalSeconds) {
