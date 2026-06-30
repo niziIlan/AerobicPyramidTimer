@@ -106,7 +106,6 @@ let timerComplete = false;
 let timerStarted = false;
 let audioContext = null;
 let lastCountdownBeep = null;
-let endingAlertPlayed = false;
 let soundMuted = muteButton ? localStorage.getItem(SOUND_MUTED_KEY) === "true" : false;
 
 document.querySelector("#create-routine-button").addEventListener("click", () => openEditor());
@@ -502,7 +501,6 @@ function loadTimerPhase(options = {}) {
   const phase = timerSequence[timerPhaseIndex];
   timerSecondsRemaining = phase.durationSeconds;
   lastCountdownBeep = null;
-  endingAlertPlayed = false;
   timerDeadline = Date.now() + timerSecondsRemaining * 1000;
   timerPanel.dataset.phaseType = phase.phaseType;
   if (phase.phaseType === "preparation") {
@@ -518,7 +516,6 @@ function loadTimerPhase(options = {}) {
   setPauseButtonState(timerPaused);
 
   if (autoStart) {
-    playEndingAlert(timerSecondsRemaining);
     playCountdownBeep(timerSecondsRemaining);
     timerInterval = window.setInterval(updateTimer, 200);
   }
@@ -531,7 +528,6 @@ function updateTimer() {
   if (nextSeconds !== timerSecondsRemaining) {
     timerSecondsRemaining = nextSeconds;
     renderTimer();
-    playEndingAlert(timerSecondsRemaining);
     playCountdownBeep(timerSecondsRemaining);
   }
 
@@ -816,19 +812,6 @@ function playCountdownBeep(secondsRemaining) {
   gain.connect(context.destination);
   oscillator.start(startTime);
   oscillator.stop(startTime + 0.18);
-}
-
-function playEndingAlert(secondsRemaining) {
-  if (
-    soundMuted
-    || endingAlertPlayed
-    || secondsRemaining !== 3
-  ) {
-    return;
-  }
-
-  endingAlertPlayed = true;
-  playBell();
 }
 
 function moveRoutine(routineId, direction) {
