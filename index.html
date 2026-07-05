@@ -15,8 +15,7 @@
   <body>
     <header class="app-header">
       <div class="container">
-        <h1>Aerobic Timer</h1>
-        <p>טיימר אירובי</p>
+        <h1><span>טיימר אירובי</span><b aria-hidden="true">-</b><span>Aerobic Timer</span></h1>
       </div>
     </header>
 
@@ -24,7 +23,11 @@
       <section id="routines-view" aria-labelledby="routines-title">
         <div class="section-heading">
           <div>
-            <h2 id="routines-title">תוכניות האימון שלי</h2>
+            <div class="heading-title-row">
+              <button class="home-button" data-home-button type="button" aria-label="חזרה למסך הראשי" title="חזרה למסך הראשי">⌂</button>
+              <h2 id="routines-title">תוכניות האימון שלי</h2>
+              <button id="open-backup-button" class="backup-button" type="button" aria-label="ייצוא וייבוא תוכניות" title="ייצוא וייבוא תוכניות">⇅</button>
+            </div>
             <span class="section-title-line" aria-hidden="true"></span>
           </div>
           <button id="create-routine-button" class="primary-button" type="button">
@@ -36,9 +39,45 @@
         <div id="routines-list" class="routines-list"></div>
       </section>
 
+      <section id="backup-view" class="backup-view" aria-labelledby="backup-title" hidden>
+        <div class="editor-heading">
+          <div class="heading-title-row">
+            <button id="back-to-routines-button" class="home-button" type="button" aria-label="חזרה לתוכניות" title="חזרה לתוכניות">⌂</button>
+            <h2 id="backup-title">גיבוי תוכניות</h2>
+          </div>
+          <span class="editor-heading-line" aria-hidden="true"></span>
+        </div>
+
+        <section class="editor-section backup-panel" aria-labelledby="export-title">
+          <h3 id="export-title" class="editor-section-title">
+            <span aria-hidden="true">⇩</span>
+            ייצוא תוכניות
+          </h3>
+          <p class="backup-text">שמירת כל תוכניות האימון לקובץ גיבוי במכשיר.</p>
+          <button id="export-routines-button" class="primary-button" type="button">ייצוא תוכניות</button>
+        </section>
+
+        <section class="editor-section backup-panel" aria-labelledby="import-title">
+          <h3 id="import-title" class="editor-section-title">
+            <span aria-hidden="true">⇧</span>
+            ייבוא תוכניות
+          </h3>
+          <p class="backup-text">בחירת קובץ גיבוי תוסיף את התוכניות לרשימה הקיימת.</p>
+          <label class="file-import-label">
+            <span>בחירת קובץ גיבוי</span>
+            <input id="import-routines-file" type="file" accept="application/json,.json">
+          </label>
+          <button id="import-routines-button" class="secondary-button" type="button">ייבוא תוכניות</button>
+        </section>
+
+        <div id="backup-message" class="message" role="status" aria-live="polite" hidden></div>
+      </section>
       <section id="editor-view" class="editor" aria-labelledby="editor-title" hidden>
         <div class="editor-heading">
-          <h2 id="editor-title">יצירת תוכנית חדשה</h2>
+          <div class="heading-title-row">
+            <button class="home-button" data-home-button type="button" aria-label="חזרה למסך הראשי" title="חזרה למסך הראשי">⌂</button>
+            <h2 id="editor-title">יצירת תוכנית חדשה</h2>
+          </div>
           <span class="editor-heading-line" aria-hidden="true"></span>
         </div>
 
@@ -55,33 +94,45 @@
                 <input id="routine-name" name="routineName" type="text" required>
               </label>
 
-              <label class="field">
-                <span>מספר חזרות</span>
-                <select id="repeat-count" name="repeatCount" required></select>
+              <label class="field field-wide routine-mode-field">
+                <span>מבנה התוכנית</span>
+                <select id="routine-mode" name="routineMode">
+                  <option value="standard">תוכנית שלבים</option>
+                  <option value="stations">תוכנית תחנות</option>
+                </select>
               </label>
 
-              <div class="field">
-                <span>מנוחה בין מחזורים</span>
+              <label class="field station-field" id="station-settings" hidden>
+                <span>מספר תחנות</span>
+                <select id="station-count" name="stationCount"></select>
+              </label>
+
+              <div class="field field-wide cycle-rest-field">
+                <span>מנוחה בסוף כל סבב</span>
                 <div id="cycle-rest" class="duration-picker">
                   <label class="duration-seconds-field">
                     <span>שניות</span>
-                    <select class="duration-seconds" aria-label="שניות מנוחה בין מחזורים"></select>
+                    <select class="duration-seconds" aria-label="שניות מנוחה בסוף כל סבב"></select>
                   </label>
                   <label class="duration-minutes-field">
                     <span>דקות</span>
-                    <select class="duration-minutes" aria-label="דקות מנוחה בין מחזורים"></select>
+                    <select class="duration-minutes" aria-label="דקות מנוחה בסוף כל סבב"></select>
                   </label>
                   <label class="duration-hours-field">
                     <span>שעות</span>
-                    <select class="duration-hours" aria-label="שעות מנוחה בין מחזורים"></select>
+                    <select class="duration-hours" aria-label="שעות מנוחה בסוף כל סבב"></select>
                   </label>
                 </div>
               </div>
-            </div>
 
+              <label class="field rounds-field">
+                <span>מספר סבבים</span>
+                <select id="repeat-count" name="repeatCount" required></select>
+              </label>
+            </div>
             <div class="routine-summary" aria-live="polite">
               <span><strong id="summary-steps">0</strong> שלבים</span>
-              <span><strong id="summary-repeats">1</strong> חזרות</span>
+              <span><strong id="summary-repeats">1</strong> סבבים</span>
               <span>משך כולל משוער <strong id="summary-duration">00:00</strong></span>
             </div>
           </section>
@@ -90,12 +141,24 @@
             <div class="steps-heading">
               <h3 id="workout-steps-title" class="editor-section-title">
                 <span aria-hidden="true">☷</span>
-                שלבי האימון
+                <span id="workout-steps-label">שלבי האימון</span>
               </h3>
-              <button id="add-step-button" class="add-step-button" type="button">+ הוספת שלב</button>
+              <button
+                id="toggle-steps-button"
+                class="accordion-toggle"
+                type="button"
+                aria-expanded="true"
+                aria-controls="steps-editor-body"
+              >
+                <span aria-hidden="true">×</span>
+                <span>סגירה</span>
+              </button>
             </div>
 
-            <div id="steps-list" class="steps-list"></div>
+            <div id="steps-editor-body" class="steps-editor-body">
+              <button id="add-step-button" class="add-step-button" type="button">+ הוספת שלב</button>
+              <div id="steps-list" class="steps-list"></div>
+            </div>
           </section>
 
           <div class="form-actions">
@@ -109,7 +172,7 @@
         <div class="timer-actions">
           <button id="exit-timer-button" class="timer-control timer-stop" type="button">
             <span class="timer-control-icon" aria-hidden="true">■</span>
-            <span>עצור</span>
+            <span>מעבר לתוכניות</span>
           </button>
           <button id="pause-timer-button" class="timer-control timer-pause timer-main-action" type="button">
             <span class="timer-control-icon" aria-hidden="true">Ⅱ</span>
@@ -137,6 +200,10 @@
             <span class="mute-icon" aria-hidden="true">🔊</span>
           </button>
 
+          <div class="timer-identity">
+            <h2 id="timer-routine-name"></h2>
+          </div>
+
           <div class="timer-ring" aria-label="הזמן שנותר בשלב">
             <svg class="timer-ring-graphic" viewBox="0 0 100 100" aria-hidden="true">
               <circle class="timer-ring-track" cx="50" cy="50" r="46"></circle>
@@ -147,12 +214,7 @@
 
           <p id="timer-phase-label" class="timer-phase-label">עבודה</p>
           <p id="timer-status" class="timer-status" aria-live="polite">האימון התחיל</p>
-
-          <div class="timer-identity">
-            <h2 id="timer-routine-name"></h2>
-          </div>
-
-          <div class="timer-progress-row">
+<div class="timer-progress-row">
             <span id="timer-cycle-progress">מחזור 1 מתוך 1</span>
             <span id="timer-step-progress">שלב 1 מתוך 1</span>
           </div>

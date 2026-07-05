@@ -63,12 +63,29 @@ const testRoutine = {
 
 const routinesView = document.querySelector("#routines-view");
 const editorView = document.querySelector("#editor-view");
+const backupView = document.querySelector("#backup-view");
 const timerView = document.querySelector("#timer-view");
 const routinesList = document.querySelector("#routines-list");
 const message = document.querySelector("#message");
+const backupMessage = document.querySelector("#backup-message");
+const openBackupButton = document.querySelector("#open-backup-button");
+const backToRoutinesButton = document.querySelector("#back-to-routines-button");
+const exportRoutinesButton = document.querySelector("#export-routines-button");
+const importRoutinesButton = document.querySelector("#import-routines-button");
+const importRoutinesFile = document.querySelector("#import-routines-file");
 const form = document.querySelector("#routine-form");
 const editorTitle = document.querySelector("#editor-title");
 const routineNameInput = document.querySelector("#routine-name");
+const routineModeInput = document.querySelector("#routine-mode");
+const stationCountInput = document.querySelector("#station-count");
+const stationSettings = document.querySelector("#station-settings");
+const roundSettings = document.querySelector(".rounds-field");
+const cycleRestField = document.querySelector(".cycle-rest-field");
+const workoutStepsSection = document.querySelector(".workout-steps-section");
+const workoutStepsLabel = document.querySelector("#workout-steps-label");
+const stepsEditorBody = document.querySelector("#steps-editor-body");
+const toggleStepsButton = document.querySelector("#toggle-steps-button");
+const addStepButton = document.querySelector("#add-step-button");
 const repeatCountInput = document.querySelector("#repeat-count");
 const cycleRestPicker = document.querySelector("#cycle-rest");
 const stepsList = document.querySelector("#steps-list");
@@ -90,6 +107,7 @@ const muteButton = document.querySelector("#mute-button");
 const muteIcon = muteButton ? muteButton.querySelector(".mute-icon") : null;
 const summarySteps = document.querySelector("#summary-steps");
 const summaryRepeats = document.querySelector("#summary-repeats");
+const summaryRepeatsItem = summaryRepeats.closest("span");
 const summaryDuration = document.querySelector("#summary-duration");
 
 let routines = loadRoutines();
@@ -108,8 +126,16 @@ let audioContext = null;
 let lastCountdownBeep = null;
 let soundMuted = muteButton ? localStorage.getItem(SOUND_MUTED_KEY) === "true" : false;
 
+document.querySelectorAll("[data-home-button]").forEach((button) => {
+  button.addEventListener("click", showHomeTimer);
+});
 document.querySelector("#create-routine-button").addEventListener("click", () => openEditor());
-document.querySelector("#add-step-button").addEventListener("click", () => addStepRow());
+openBackupButton.addEventListener("click", openBackupView);
+backToRoutinesButton.addEventListener("click", closeBackupView);
+exportRoutinesButton.addEventListener("click", exportRoutines);
+importRoutinesButton.addEventListener("click", importRoutinesFromFile);
+addStepButton.addEventListener("click", () => addStepRow());
+toggleStepsButton.addEventListener("click", toggleStepsAccordion);
 document.querySelector("#cancel-edit-button").addEventListener("click", closeEditor);
 document.querySelector("#exit-timer-button").addEventListener("click", exitTimer);
 pauseTimerButton.addEventListener("click", toggleTimerPause);
@@ -121,10 +147,12 @@ if (muteButton) {
 form.addEventListener("submit", saveRoutineFromForm);
 form.addEventListener("input", updateEditorSummary);
 form.addEventListener("change", updateEditorSummary);
+routineModeInput.addEventListener("change", handleRoutineModeChange);
 routinesList.addEventListener("click", handleRoutineAction);
 stepsList.addEventListener("click", handleStepAction);
 stepsList.addEventListener("change", handleStepTypeChange);
 
+populateNumberSelect(stationCountInput, 1, 30);
 populateNumberSelect(repeatCountInput, 1, 100);
 populateDurationPicker(cycleRestPicker);
 renderRoutines();
@@ -232,6 +260,14 @@ function saveRoutines() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(routines));
 }
 
+function showHomeTimer() {
+  closeEditor();
+  const routine = activeRoutine || routines[0];
+  if (routine) {
+    startRoutine(routine);
+  }
+}
+
 function openInitialTimerView() {
   if (routines.length === 0) {
     return;
@@ -240,6 +276,152 @@ function openInitialTimerView() {
   startRoutine(routines[0]);
 }
 
+function openBackupView() {
+  stopTimerInterval();
+  timerView.hidden = true;
+  editorView.hidden = true;
+  routinesView.hidden = true;
+  backupView.hidden = false;
+  hideBackupMessage();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeBackupView() {
+  backupView.hidden = true;
+  routinesView.hidden = false;
+  hideBackupMessage();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function exportRoutines() {
+  const backup = {
+    app: "Aerobic Timer",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    routines
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `aerobic-timer-routines-${date}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showBackupMessage("קובץ הגיבוי נוצר בהצלחה");
+}
+
+function importRoutinesFromFile() {
+  const file = importRoutinesFile.files[0];
+  if (!file) {
+    showBackupMessage("יש לבחור קובץ גיבוי לפני הייבוא", true);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const importedRoutines = parseImportedRoutines(reader.result);
+      if (importedRoutines.length === 0) {
+        showBackupMessage("לא נמצאו תוכניות בקובץ", true);
+        return;
+      }
+
+      const preparedRoutines = importedRoutines.map((routine) => ({
+        ...routine,
+        id: createId(),
+        name: createImportedRoutineName(routine.name)
+      }));
+
+      routines = [...routines, ...preparedRoutines];
+      saveRoutines();
+      renderRoutines();
+      importRoutinesFile.value = "";
+      showBackupMessage(`${preparedRoutines.length} תוכניות יובאו בהצלחה`);
+    } catch (error) {
+      console.warn("Could not import routines.", error);
+      showBackupMessage("קובץ הגיבוי לא תקין", true);
+    }
+  });
+  reader.readAsText(file);
+}
+
+function parseImportedRoutines(fileText) {
+  const parsed = JSON.parse(fileText);
+  const importedRoutines = Array.isArray(parsed) ? parsed : parsed.routines;
+
+  if (!Array.isArray(importedRoutines)) {
+    throw new Error("Missing routines array");
+  }
+
+  return importedRoutines
+    .map(normalizeImportedRoutine)
+    .filter(Boolean);
+}
+
+function normalizeImportedRoutine(routine) {
+  if (!routine || typeof routine !== "object" || !Array.isArray(routine.steps)) {
+    return null;
+  }
+
+  const steps = routine.steps
+    .map((step) => ({
+      label: String(step.label || "שלב"),
+      durationSeconds: Math.max(1, Number(step.durationSeconds) || 0),
+      type: step.type === "rest" ? "rest" : "work"
+    }))
+    .filter((step) => step.durationSeconds > 0);
+
+  if (steps.length === 0) {
+    return null;
+  }
+
+  const mode = routine.mode === "stations" ? "stations" : "standard";
+  const importedRoutine = {
+    id: createId(),
+    mode,
+    name: String(routine.name || "תוכנית מיובאת"),
+    repeatCount: mode === "stations" ? Math.max(1, Number(routine.repeatCount) || 1) : 1,
+    restBetweenCyclesSeconds: mode === "stations" ? Math.max(0, Number(routine.restBetweenCyclesSeconds) || 0) : 0,
+    steps
+  };
+
+  if (mode === "stations") {
+    importedRoutine.stationCount = Math.max(1, Number(routine.stationCount) || 1);
+  }
+
+  return importedRoutine;
+}
+
+function createImportedRoutineName(name) {
+  const baseName = String(name || "תוכנית מיובאת");
+  const existingNames = new Set(routines.map((routine) => routine.name));
+  if (!existingNames.has(baseName)) {
+    return baseName;
+  }
+
+  let copyIndex = 1;
+  let nextName = `${baseName} - ייבוא`;
+  while (existingNames.has(nextName)) {
+    copyIndex += 1;
+    nextName = `${baseName} - ייבוא ${copyIndex}`;
+  }
+  return nextName;
+}
+
+function showBackupMessage(text, isError = false) {
+  backupMessage.textContent = text;
+  backupMessage.hidden = false;
+  backupMessage.classList.toggle("error-message", isError);
+}
+
+function hideBackupMessage() {
+  backupMessage.hidden = true;
+  backupMessage.textContent = "";
+  backupMessage.classList.remove("error-message");
+}
 function renderRoutines() {
   routinesList.replaceChildren();
 
@@ -253,29 +435,33 @@ function renderRoutines() {
 
   routines.forEach((routine) => {
     const card = document.createElement("article");
-    card.className = "routine-card";
+    card.className = "routine-card is-collapsed";
     card.dataset.routineId = routine.id;
 
     const title = document.createElement("h3");
     title.textContent = routine.name;
 
-    const menuMark = document.createElement("span");
-    menuMark.className = "routine-menu-mark";
-    menuMark.textContent = "⋮";
-    menuMark.setAttribute("aria-hidden", "true");
-
     const summary = document.createElement("p");
     summary.className = "step-summary";
-    summary.textContent = routine.steps
-      .map((step) => formatStepSummaryDuration(step.durationSeconds))
-      .join(" / ");
+    renderRoutineSummary(summary, routine);
+
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "routine-toggle-button";
+    toggleButton.dataset.action = "toggle";
+    toggleButton.setAttribute("aria-expanded", "false");
+    toggleButton.setAttribute("aria-label", `פתיחת פרטי התוכנית ${routine.name}`);
+    toggleButton.title = "פתיחת פרטי התוכנית";
+    toggleButton.innerHTML = '<span aria-hidden="true">▾</span>';
 
     const details = document.createElement("p");
     details.className = "routine-details";
-    details.append(
-      createDetail("↻", "מספר חזרות:", routine.repeatCount),
-      createDetail("◷", "מנוחה בין מחזורים:", formatDurationLabel(routine.restBetweenCyclesSeconds))
-    );
+    if (routine.mode === "stations") {
+      details.append(
+        createDetail("↻", "מספר סבבים:", routine.repeatCount),
+        createDetail("◷", "מנוחה בין סבבים:", formatDurationLabel(routine.restBetweenCyclesSeconds))
+      );
+    }
 
     const actions = document.createElement("div");
     actions.className = "card-actions";
@@ -307,12 +493,52 @@ function renderRoutines() {
     cardHeading.className = "routine-card-heading";
     const titleGroup = document.createElement("div");
     titleGroup.className = "routine-title-group";
-    titleGroup.append(menuMark, title);
+    titleGroup.append(toggleButton, title);
     cardHeading.append(titleGroup, orderActions);
 
-    card.append(cardHeading, summary, details, actions);
+    const compactSummary = document.createElement("div");
+    compactSummary.className = "routine-compact-summary";
+    compactSummary.append(summary);
+
+    const accordionBody = document.createElement("div");
+    accordionBody.className = "routine-accordion-body";
+    accordionBody.hidden = true;
+    if (routine.mode === "stations") {
+      accordionBody.append(details);
+    }
+    accordionBody.append(actions);
+
+    card.append(cardHeading, compactSummary, accordionBody);
     routinesList.append(card);
   });
+}
+
+function renderRoutineSummary(summaryElement, routine) {
+  summaryElement.replaceChildren();
+
+  if (routine.mode === "stations") {
+    summaryElement.classList.add("station-summary");
+    const stationCount = routine.stationCount || 1;
+    const stationLabel = stationCount === 1 ? "תחנה" : "תחנות";
+    const cycleLabel = routine.repeatCount === 1 ? "סבב" : "סבבים";
+    const durationSummary = routine.steps
+      .map((step) => formatStationEventDuration(step.durationSeconds))
+      .join(" / ");
+
+    const mainLine = document.createElement("span");
+    mainLine.className = "summary-line summary-main";
+    mainLine.textContent = `${stationCount} ${stationLabel}  ${routine.repeatCount} ${cycleLabel}`;
+
+    const eventsLine = document.createElement("span");
+    eventsLine.className = "summary-line summary-events";
+    eventsLine.textContent = `בכל תחנה ${durationSummary}`;
+
+    summaryElement.append(mainLine, eventsLine);
+    return;
+  }
+
+  summaryElement.classList.remove("station-summary");
+  summaryElement.textContent = getRoutineSummaryText(routine);
 }
 
 function createDetail(icon, label, value) {
@@ -361,6 +587,21 @@ function formatDurationLabel(totalSeconds) {
   return `${seconds} שניות`;
 }
 
+function toggleRoutineCard(card, routine) {
+  const isOpening = card.classList.toggle("is-collapsed");
+  const shouldShow = !isOpening;
+  const body = card.querySelector(".routine-accordion-body");
+  const button = card.querySelector(".routine-toggle-button");
+
+  body.hidden = !shouldShow;
+  button.setAttribute("aria-expanded", String(shouldShow));
+  button.setAttribute(
+    "aria-label",
+    `${shouldShow ? "סגירת" : "פתיחת"} פרטי התוכנית ${routine.name}`
+  );
+  button.title = shouldShow ? "סגירת פרטי התוכנית" : "פתיחת פרטי התוכנית";
+  button.querySelector("span").textContent = shouldShow ? "▴" : "▾";
+}
 function handleRoutineAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) {
@@ -370,6 +611,11 @@ function handleRoutineAction(event) {
   const card = button.closest(".routine-card");
   const routine = routines.find((item) => item.id === card.dataset.routineId);
   if (!routine) {
+    return;
+  }
+
+  if (button.dataset.action === "toggle") {
+    toggleRoutineCard(card, routine);
     return;
   }
 
@@ -401,7 +647,10 @@ function handleRoutineAction(event) {
 function openEditor(routine = null) {
   editingRoutineId = routine ? routine.id : null;
   editorTitle.textContent = routine ? "עריכת תוכנית" : "יצירת תוכנית חדשה";
+  const routineMode = routine ? routine.mode || "standard" : "standard";
+  routineModeInput.value = routineMode;
   routineNameInput.value = routine ? routine.name : "";
+  stationCountInput.value = routine ? routine.stationCount || 1 : 1;
   repeatCountInput.value = routine ? routine.repeatCount : 1;
   setDurationPickerValue(
     cycleRestPicker,
@@ -417,9 +666,11 @@ function openEditor(routine = null) {
       ];
 
   steps.forEach(addStepRow);
+  updateRoutineModeView();
   refreshStepRows();
   updateEditorSummary();
   routinesView.hidden = true;
+  backupView.hidden = true;
   editorView.hidden = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
   routineNameInput.focus();
@@ -430,6 +681,7 @@ function closeEditor() {
   stepsList.replaceChildren();
   editingRoutineId = null;
   editorView.hidden = true;
+  backupView.hidden = true;
   routinesView.hidden = false;
 }
 
@@ -445,6 +697,7 @@ function startRoutine(routine) {
   timerComplete = false;
   routinesView.hidden = true;
   editorView.hidden = true;
+  backupView.hidden = true;
   timerView.hidden = false;
   timerRoutineName.textContent = `אימון פעיל · ${activeRoutine.name}`;
   pauseTimerButton.hidden = false;
@@ -463,25 +716,51 @@ function buildTimerSequence(routine) {
     stepIndex: -1
   }];
 
-  for (let cycleIndex = 0; cycleIndex < routine.repeatCount; cycleIndex += 1) {
-    routine.steps.forEach((step, stepIndex) => {
-      sequence.push({
-        ...step,
-        cycleIndex,
-        stepIndex,
-        phaseType: step.type
-      });
+  if (routine.mode === "stations") {
+    return buildStationsTimerSequence(routine, sequence);
+  }
+
+  routine.steps.forEach((step, stepIndex) => {
+    sequence.push({
+      ...step,
+      cycleIndex: 0,
+      stepIndex,
+      phaseType: step.type
     });
+  });
+
+  return sequence;
+}
+
+function buildStationsTimerSequence(routine, sequence) {
+  const stationCount = Number(routine.stationCount) || 1;
+
+  for (let cycleIndex = 0; cycleIndex < routine.repeatCount; cycleIndex += 1) {
+    for (let stationIndex = 0; stationIndex < stationCount; stationIndex += 1) {
+      routine.steps.forEach((step, eventIndex) => {
+        sequence.push({
+          ...step,
+          label: `תחנה ${stationIndex + 1} - ${step.label}`,
+          cycleIndex,
+          stationIndex,
+          eventIndex,
+          stepIndex: stationIndex * routine.steps.length + eventIndex,
+          phaseType: step.type
+        });
+      });
+    }
 
     const hasAnotherCycle = cycleIndex < routine.repeatCount - 1;
     if (hasAnotherCycle && routine.restBetweenCyclesSeconds > 0) {
       sequence.push({
-        label: "מנוחה בין מחזורים",
+        label: "מנוחה בין סבבים",
         durationSeconds: routine.restBetweenCyclesSeconds,
         type: "rest",
         phaseType: "cycle-rest",
         cycleIndex,
-        stepIndex: routine.steps.length
+        stationIndex: stationCount,
+        eventIndex: routine.steps.length,
+        stepIndex: stationCount * routine.steps.length
       });
     }
   }
@@ -506,7 +785,7 @@ function loadTimerPhase(options = {}) {
   if (phase.phaseType === "preparation") {
     timerStatus.textContent = "האימון יתחיל מיד";
   } else if (phase.phaseType === "cycle-rest") {
-    timerStatus.textContent = "המחזור הבא מתחיל מיד לאחר המנוחה";
+    timerStatus.textContent = "הסבב הבא מתחיל מיד לאחר המנוחה";
   } else {
     timerStatus.textContent = "הטיימר פועל";
   }
@@ -544,16 +823,25 @@ function renderTimer() {
 
   timerPhaseLabel.textContent = phase.label;
   timerCountdown.textContent = formatTime(timerSecondsRemaining);
+  const isStationsMode = activeRoutine.mode === "stations";
+  timerCycleProgress.hidden = !isStationsMode;
+
   if (phase.phaseType === "preparation") {
-    timerCycleProgress.textContent = `מחזור 1 מתוך ${activeRoutine.repeatCount}`;
+    timerCycleProgress.textContent = isStationsMode
+      ? `סבב 1 מתוך ${activeRoutine.repeatCount}`
+      : "";
     timerStepProgress.textContent = "הכנה";
-  } else {
+  } else if (isStationsMode) {
+    const cycleLabel = "סבב";
     timerCycleProgress.textContent = phase.phaseType === "cycle-rest"
-      ? `הושלם מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`
-      : `מחזור ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`;
+      ? `הושלם ${cycleLabel} ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`
+      : `${cycleLabel} ${phase.cycleIndex + 1} מתוך ${activeRoutine.repeatCount}`;
+
     timerStepProgress.textContent = phase.phaseType === "cycle-rest"
-      ? "מנוחה בין מחזורים"
-      : `שלב ${phase.stepIndex + 1} מתוך ${activeRoutine.steps.length}`;
+      ? "מנוחה בין סבבים"
+      : `תחנה ${phase.stationIndex + 1} מתוך ${activeRoutine.stationCount} · אירוע ${phase.eventIndex + 1} מתוך ${activeRoutine.steps.length}`;
+  } else {
+    timerStepProgress.textContent = `שלב ${phase.stepIndex + 1} מתוך ${activeRoutine.steps.length}`;
   }
 
   const elapsed = phase.durationSeconds - timerSecondsRemaining;
@@ -571,9 +859,37 @@ function renderTimer() {
     : "סיום האימון";
 }
 
+function getRoutineSummaryText(routine) {
+  if (routine.mode === "stations") {
+    const stationCount = routine.stationCount || 1;
+    const cycleLabel = routine.repeatCount === 1 ? "סבב" : "סבבים";
+    const durationSummary = routine.steps
+      .map((step) => formatStationEventDuration(step.durationSeconds))
+      .join(" / ");
+
+    return `תוכנית ${stationCount} תחנות, ${routine.repeatCount} ${cycleLabel} ובכל תחנה ${durationSummary}`;
+  }
+
+  return routine.steps
+    .map((step) => formatStepSummaryDuration(step.durationSeconds))
+    .join(" / ");
+}
+
+function formatStationEventDuration(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0 && seconds === 0) {
+    return String(minutes);
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function formatStepSummaryDuration(totalSeconds) {
-  if (totalSeconds >= 60 && totalSeconds % 60 === 0) {
-    return String(totalSeconds / 60);
+  if (totalSeconds >= 60) {
+    const minutes = totalSeconds / 60;
+    return Number.isInteger(minutes) ? String(minutes) : String(minutes);
   }
 
   return String(totalSeconds);
@@ -651,7 +967,13 @@ function completeTimer() {
   timerPanel.dataset.phaseType = "complete";
   timerPhaseLabel.textContent = "האימון הושלם";
   timerCountdown.textContent = "00:00";
-  timerCycleProgress.textContent = `${activeRoutine.repeatCount} מחזורים הושלמו`;
+  if (activeRoutine.mode === "stations") {
+    timerCycleProgress.hidden = false;
+    timerCycleProgress.textContent = `${activeRoutine.repeatCount} סבבים הושלמו`;
+  } else {
+    timerCycleProgress.hidden = true;
+    timerCycleProgress.textContent = "";
+  }
   timerStepProgress.textContent = "כל הכבוד!";
   timerStatus.textContent = "סיימת את כל שלבי האימון";
   timerProgressRing.style.strokeDashoffset = "0";
@@ -667,6 +989,7 @@ function exitTimer() {
   timerComplete = false;
   timerStarted = false;
   timerView.hidden = true;
+  backupView.hidden = true;
   routinesView.hidden = false;
 }
 
@@ -860,18 +1183,20 @@ function addStepRow(step = { label: "עבודה", durationSeconds: 30, type: "wo
         </label>
       </div>
     </div>
-    <label class="field">
-      <span>סוג</span>
-      <select class="step-type step-type-badge">
-        <option value="work">עבודה</option>
-        <option value="rest">מנוחה</option>
-      </select>
-    </label>
-    <div class="step-actions">
-      <button class="step-action-button duplicate-step" data-step-action="duplicate" type="button" aria-label="שכפול שלב" title="שכפול שלב">▣</button>
-      <button class="step-action-button move-step-up" data-step-action="up" type="button" aria-label="העברת שלב למעלה" title="העברת שלב למעלה">↑</button>
-      <button class="step-action-button move-step-down" data-step-action="down" type="button" aria-label="העברת שלב למטה" title="העברת שלב למטה">↓</button>
-      <button class="step-action-button delete-step" data-step-action="delete" type="button" aria-label="מחיקת שלב" title="מחיקת שלב">×</button>
+    <div class="step-type-actions">
+      <label class="field">
+        <span>סוג</span>
+        <select class="step-type step-type-badge">
+          <option value="work">עבודה</option>
+          <option value="rest">מנוחה</option>
+        </select>
+      </label>
+      <div class="step-actions">
+        <button class="step-action-button duplicate-step" data-step-action="duplicate" type="button" aria-label="שכפול שלב" title="שכפול שלב">⧉</button>
+        <button class="step-action-button move-step-up" data-step-action="up" type="button" aria-label="העברת שלב למעלה" title="העברת שלב למעלה">↑</button>
+        <button class="step-action-button move-step-down" data-step-action="down" type="button" aria-label="העברת שלב למטה" title="העברת שלב למטה">↓</button>
+        <button class="step-action-button delete-step" data-step-action="delete" type="button" aria-label="מחיקת שלב" title="מחיקת שלב">×</button>
+      </div>
     </div>
   `;
 
@@ -965,23 +1290,55 @@ function refreshStepRows() {
   const rows = [...stepsList.querySelectorAll(".step-row")];
 
   rows.forEach((row, index) => {
-    row.querySelector(".step-number").textContent = `שלב ${index + 1}`;
+    row.querySelector(".step-number").textContent = routineModeInput.value === "stations"
+      ? `אירוע ${index + 1}`
+      : `שלב ${index + 1}`;
     row.querySelector(".move-step-up").disabled = index === 0;
     row.querySelector(".move-step-down").disabled = index === rows.length - 1;
   });
 }
 
+function handleRoutineModeChange() {
+  updateRoutineModeView();
+  updateEditorSummary();
+}
+
+function updateRoutineModeView() {
+  const isStationsMode = routineModeInput.value === "stations";
+  stationSettings.hidden = !isStationsMode;
+  roundSettings.hidden = !isStationsMode;
+  cycleRestField.hidden = !isStationsMode;
+  summaryRepeatsItem.hidden = !isStationsMode;
+  workoutStepsLabel.textContent = isStationsMode
+    ? "תחנה - אירועים שחוזרים בכל תחנה"
+    : "שלבי האימון";
+  addStepButton.textContent = isStationsMode ? "+ הוספת אירוע" : "+ הוספת שלב";
+  refreshStepRows();
+}
+
+function toggleStepsAccordion() {
+  const isCollapsed = workoutStepsSection.classList.toggle("is-collapsed");
+  stepsEditorBody.hidden = isCollapsed;
+  toggleStepsButton.setAttribute("aria-expanded", String(!isCollapsed));
+  toggleStepsButton.querySelector("span:first-child").textContent = isCollapsed ? "+" : "×";
+  toggleStepsButton.querySelector("span:last-child").textContent = isCollapsed ? "פתיחה" : "סגירה";
+}
+
 function updateEditorSummary() {
   const rows = [...stepsList.querySelectorAll(".step-row")];
-  const repeats = Number(repeatCountInput.value) || 1;
+  const isStationsMode = routineModeInput.value === "stations";
+  const repeats = isStationsMode ? Number(repeatCountInput.value) || 1 : 1;
+  const stationCount = isStationsMode ? Number(stationCountInput.value) || 1 : 1;
   const cycleDuration = rows.reduce(
     (total, row) => total + getDurationPickerValue(row.querySelector(".step-duration")),
     0
-  );
-  const cycleRest = getDurationPickerValue(cycleRestPicker);
+  ) * stationCount;
+  const cycleRest = isStationsMode ? getDurationPickerValue(cycleRestPicker) : 0;
   const totalDuration = cycleDuration * repeats + cycleRest * Math.max(0, repeats - 1);
 
-  summarySteps.textContent = rows.length;
+  summarySteps.textContent = isStationsMode
+    ? `${stationCount} תחנות × ${rows.length} אירועים`
+    : rows.length;
   summaryRepeats.textContent = repeats;
   summaryDuration.textContent = formatSummaryTime(totalDuration);
 }
@@ -1015,17 +1372,23 @@ function saveRoutineFromForm(event) {
     return;
   }
 
+  const isStationsMode = routineModeInput.value === "stations";
   const routineData = {
     id: editingRoutineId || createId(),
+    mode: routineModeInput.value,
     name: routineNameInput.value.trim(),
-    repeatCount: Number(repeatCountInput.value),
-    restBetweenCyclesSeconds: getDurationPickerValue(cycleRestPicker),
+    repeatCount: isStationsMode ? Number(repeatCountInput.value) : 1,
+    restBetweenCyclesSeconds: isStationsMode ? getDurationPickerValue(cycleRestPicker) : 0,
     steps: stepRows.map((row) => ({
       label: row.querySelector(".step-label").value.trim(),
       durationSeconds: getDurationPickerValue(row.querySelector(".step-duration")),
       type: row.querySelector(".step-type").value
     }))
   };
+
+  if (isStationsMode) {
+    routineData.stationCount = Number(stationCountInput.value) || 1;
+  }
 
   if (editingRoutineId) {
     routines = routines.map((routine) =>
